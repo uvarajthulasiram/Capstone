@@ -1,6 +1,6 @@
 import pickle
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 # -----------------------------
 # Load saved artifacts
@@ -11,9 +11,14 @@ with open("artifacts/sentiment_pipeline.pkl", "rb") as f:
 with open("artifacts/user_item_matrix.pkl", "rb") as f:
     user_item_matrix = pickle.load(f)
 
-with open("artifacts/user_sim_df.pkl", "rb") as f:
-    user_sim_df = pickle.load(f)
+z = np.load("artifacts/user_topk_sim.npz", allow_pickle=True)
+users = z["users"]
+items = z["items"]
+topk_indices = z["topk_indices"] 
+topk_sims = z["topk_sims"] 
 
+# Map user -> row index
+user_to_idx = {u: i for i, u in enumerate(users)}
 
 # -----------------------------
 # Sentiment Prediction
@@ -24,25 +29,38 @@ def predict_sentiment(text):
     """
     return int(sentiment_model.predict([text])[0])
 
-
 # -----------------------------
-# User-User Recommendation
+# User-User Recommendation (Top-K)
 # -----------------------------
 def recommend_user(user, top_n=5):
     """
-    Recommend products for a given user using user-user collaborative filtering
+    Recommend products for a given user using Top-K user-user collaborative filtering
     """
-    if user not in user_item_matrix.index:
+    if user not in user_to_idx:
         return []
 
-    # Similarity scores for the user
-    sim_scores = user_sim_df.loc[user]
+    u_idx = user_to_idx[user]
 
-    # Weighted sum of ratings
-    weighted_ratings = user_item_matrix.T.dot(sim_scores) / sim_scores.sum()
+    nbr_idx = topk_indices[u_idx]
+    nbr_sims = topk_sims[u_idx]
 
-    # Remove already rated items
-    rated_items = user_item_matrix.loc[user]
-    recommendations = weighted_ratings[rated_items == 0]
+    denom = float(nbr_sims.sum())
+    if denom == 0.0:
+        return []
 
-    return recommendations.sort_values(ascending=False).head(top_n).index.tolist()
+    # Weighted prediction over items
+    neighbor_ratings = user_item_matrix.values[nbr_idx, :] 
+    scores = (nbr_sims @ neighbor_ratings) / denom 
+
+    # Remove already-rated items for this user
+    user_rated = user_item_matrix.values[u_idx, :]
+    scores = np.where(user_rated == 0, scores, -np.inf)
+
+    # Top-N item indices
+    if top_n <= 0:
+        return []
+
+    top_idx = np.argpartition(-scores, range(min(top_n, scores.size)))[:top_n]
+    top_idx = top_idx[np.argsort(-scores[top_idx])]
+
+    return items[top_idx].tolist()
