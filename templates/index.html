@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sentiment-Based Recommendation System</title>
+</head>
+<body>
+    <h2>Product Recommendation System</h2>
+
+    <form method="POST">
+        <label>Enter Review Text:</label><br>
+        <textarea name="review" rows="4" cols="50"></textarea><br><br>
+
+        <label>Enter Username:</label><br>
+        <input type="text" name="username"><br><br>
+
+        <button type="submit">Submit</button>
+    </form>
+
+    {% if sentiment is not none %}
+        <h3>Predicted Sentiment:
+            {{ "Positive" if sentiment == 1 else "Negative" }}
+        </h3>
+    {% endif %}
+
+    {% if recommendations %}
+        <h3>Recommended Products:</h3>
+        <ul>
+            {% for item in recommendations %}
+                <li>{{ item }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+</body>
+</html>
